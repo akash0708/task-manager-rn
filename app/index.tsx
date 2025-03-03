@@ -1,9 +1,12 @@
 import { Text, View, FlatList, StyleSheet, Button, TextInput, Pressable, StatusBar } from "react-native";
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { data } from "@/data/todos";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Poppins_500Medium, useFonts } from "@expo-google-fonts/poppins"
+import Animated, { LinearTransition } from 'react-native-reanimated';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
 
 type ItemProps = {
   id: number;
@@ -12,13 +15,44 @@ type ItemProps = {
 }
 
 export default function Index() {
-
-  const [todos, setTodos] = useState<{id: number, title: string, completed: boolean}[]>(data);
+  const [todos, setTodos] = useState<{id: number, title: string, completed: boolean}[]>([]);
   const [input, setInput] = useState<string>("");
+  
+  const router = useRouter();
 
   const [loaded, error] = useFonts({
     Poppins_500Medium
   });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const jsonValue = await AsyncStorage.getItem('todos');
+        const storageTodos = jsonValue != null ? JSON.parse(jsonValue) : null;
+
+        if (storageTodos && storageTodos.length > 0) {
+            setTodos(storageTodos.sort((a: ItemProps, b: ItemProps) => b.id - a.id));
+        } else {
+          setTodos(data.sort((a: ItemProps, b: ItemProps) => b.id - a.id));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    fetchData();
+  }, [data]);
+
+  useEffect(() => {
+    const storeData = async () => {
+      try {
+        const jsonValue = JSON.stringify(todos);
+        await AsyncStorage.setItem('todos', jsonValue);
+      } catch (e) {
+        console.error(e);
+      }
+    } 
+    storeData();
+  }, [todos]);
 
   if (!loaded && !error) {
     return null;
@@ -35,7 +69,7 @@ export default function Index() {
     }
   }
 
-  function toggleCompleted(id: number| undefined) {
+  function toggleCompleted(id: number) {
     setTodos(prevData =>
       prevData.map(todo =>
         todo.id === id ? { ...todo, completed: !todo.completed } : todo
@@ -43,17 +77,28 @@ export default function Index() {
     );
   }
 
-  function deleteTodo(id: number | undefined) {
+  function deleteTodo(id: number) {
     // remove a todo from the the array based on the id
     setTodos(prevData => prevData.filter(todo => todo.id !==
     id));
   }
 
+  function handlePress(id: number) {
+    router.push(`/todos/${id}`);
+  }
+
   const Item = ({ title, completed, id }: ItemProps) => (
     <View style={completed? styles.completedItem : styles.pendingItem}>
-      <Text style={completed? styles.completed : styles.title} onPress={() => toggleCompleted(id)}>{title}</Text>
+      <Pressable
+         onLongPress={() => toggleCompleted(id)}
+         onPress={() => handlePress(id)}
+         style={{width: '90%'}}
+      >
+        <Text style={completed? styles.completed : styles.title} ellipsizeMode="tail" numberOfLines={1}>{title}</Text>
+      </Pressable>
+
       <Pressable onPress={() => deleteTodo(id)}>
-      <Ionicons name="trash-bin" size={24} color="black" />
+        <Ionicons name="trash-bin" size={24} color="black" />
       </Pressable>
     </View>
   )
@@ -76,10 +121,12 @@ export default function Index() {
             />
             <Text style={styles.button} onPress={addTodo}>Add Todo</Text>
           </View>
-          <FlatList
+          <Animated.FlatList
             data={todos}
             renderItem={({item}) => <Item id={item.id} title={item.title} completed={item.completed} />}
             keyExtractor={item => item.id.toString()}
+            itemLayoutAnimation={LinearTransition}
+            keyboardDismissMode="on-drag"
           />
         </SafeAreaView>
       </SafeAreaProvider>
@@ -118,12 +165,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
-    fontFamily: 'Poppins_500Medium'
+    fontFamily: 'Poppins_500Medium',
+    paddingRight: 20,
   },
   completed: {
     fontSize: 16,
     textDecorationLine: 'line-through',
-    fontFamily: 'Poppins_500Medium'
+    fontFamily: 'Poppins_500Medium',
+    paddingRight: 20,
   },
   button: {
     fontSize: 16,
@@ -131,7 +180,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9c2f0',
     padding: 8,
     marginVertical: 8,
-    borderRadius: 10
+    borderRadius: 10,
+    width: 100,
+    textAlign: 'center'
   },
   input: {
     fontSize: 16,
@@ -141,7 +192,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginVertical: 8,
     borderRadius: 10,
-    flexGrow: 1
+    flex: 1,
+    overflow: 'hidden'
   },
   inputRow: {
     width: '100%',
